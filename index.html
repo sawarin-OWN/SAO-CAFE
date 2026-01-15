@@ -327,6 +327,7 @@
         const [currentPage, setCurrentPage] = useState(1);
         const [stockManagementPage, setStockManagementPage] = useState(1);
         const [stockAlertPage, setStockAlertPage] = useState(1);
+        const [franchiseStockAlertPage, setFranchiseStockAlertPage] = useState(1);
         const itemsPerPage = 50;
 
         const [dateStart, setDateStart] = useState('');
@@ -2054,6 +2055,94 @@
             
             if (failedCount > 0) {
                 console.warn(`${failedCount} PO creation(s) failed`);
+            }
+        };
+
+        // Stock Alert: สร้าง Franchise PO อัตโนมัติจากสินค้าที่สต็อกต่ำ (สำหรับ franchise - แยกซัพพลายเออร์อัตโนมัติ)
+        const handleAutoCreateFranchisePO = async (selectedProducts) => {
+            if (!selectedProducts || selectedProducts.length === 0) {
+                showError('กรุณาเลือกสินค้าที่ต้องการสร้าง PO');
+                return;
+            }
+
+            // จัดกลุ่มสินค้าตามซัพพลายเออร์
+            const productsBySupplier = {};
+            selectedProducts.forEach(product => {
+                const supplier = product.supplier || 'ไม่ระบุ';
+                if (!productsBySupplier[supplier]) {
+                    productsBySupplier[supplier] = [];
+                }
+                // คำนวณจำนวนที่ต้องสั่ง (minStock * 2 - stock ปัจจุบัน)
+                const minStock = Number(product.minStock) || 5;
+                const currentStock = Number(product.stock) || 0;
+                const orderQty = Math.max(minStock * 2 - currentStock, minStock);
+                
+                productsBySupplier[supplier].push({
+                    productId: product.id,
+                    productName: product.name,
+                    qty: orderQty,
+                    price: product.franchisePrice || product.price || 0
+                });
+            });
+
+            // แยก PO ตามซัพพลายเออร์อัตโนมัติ
+            const suppliers = Object.keys(productsBySupplier);
+            let createdCount = 0;
+            let failedCount = 0;
+            
+            Swal.fire({ 
+                title: 'กำลังสร้าง PO...', 
+                html: `กำลังสร้าง PO สำหรับ ${suppliers.length} ซัพพลายเออร์`,
+                didOpen: () => Swal.showLoading(), 
+                allowOutsideClick: false 
+            });
+
+            // สร้าง PO แยกตามซัพพลายเออร์
+            for (const supplier of suppliers) {
+                try {
+                    // เพิ่ม delay เล็กน้อยเพื่อให้แต่ละ PO มี timestamp ที่แตกต่างกัน
+                    if (createdCount > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 100)); // delay 100ms
+                    }
+                    
+                    const res = await callAPI({
+                        action: 'createFranchisePO',
+                        poData: {
+                            supplier: supplier,
+                            items: productsBySupplier[supplier],
+                            expectedDate: '',
+                            notes: `สร้างอัตโนมัติจาก Stock Alert - ${new Date().toLocaleDateString('th-TH')}`
+                        },
+                        userEmail: user.email
+                    });
+
+                    if (res && res.success) {
+                        createdCount++;
+                    } else {
+                        failedCount++;
+                    }
+                } catch (error) {
+                    failedCount++;
+                    console.error('Error creating Franchise PO for supplier:', supplier, error);
+                }
+            }
+
+            Swal.close();
+
+            if (createdCount > 0) {
+                if (suppliers.length > 1) {
+                    showSuccess('สำเร็จ', `สร้าง PO เรียบร้อย ${createdCount} ใบ (แยกตามซัพพลายเออร์)`);
+                } else {
+                    Toast.fire({ icon: 'success', title: 'สร้าง PO เรียบร้อย' });
+                }
+                fetchFranchisePOs(true);
+                fetchFranchiseStock(true);
+            } else {
+                showError('ไม่สามารถสร้าง PO ได้');
+            }
+            
+            if (failedCount > 0) {
+                console.warn(`${failedCount} Franchise PO creation(s) failed`);
             }
         };
 
@@ -4560,6 +4649,28 @@
                                             <button onClick={() => fetchFranchiseStock(true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
+                                            {filteredFranchiseLowStockProducts.length > 0 && (
+                                                <button 
+                                                    onClick={() => {
+                                                        Swal.fire({
+                                                            title: 'สร้าง PO อัตโนมัติ',
+                                                            text: `ต้องการสร้าง PO สำหรับสินค้าที่เลือกทั้งหมด (${filteredFranchiseLowStockProducts.length} รายการ) หรือไม่?`,
+                                                            icon: 'question',
+                                                            showCancelButton: true,
+                                                            confirmButtonText: 'ยืนยัน',
+                                                            cancelButtonText: 'ยกเลิก',
+                                                            confirmButtonColor: THEME_COLOR
+                                                        }).then((result) => {
+                                                            if (result.isConfirmed) {
+                                                                handleAutoCreateFranchisePO(filteredFranchiseLowStockProducts);
+                                                            }
+                                                        });
+                                                    }}
+                                                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm"
+                                                >
+                                                    <Icon icon="fa-magic" className="mr-1" /> สร้าง PO อัตโนมัติ
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -4589,6 +4700,26 @@
                                             <table className="w-full text-left text-sm text-gray-700">
                                                 <thead className="bg-red-50 font-bold uppercase text-xs text-gray-600">
                                                     <tr>
+                                                        <th className="p-4 w-12">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="rounded"
+                                                                checked={(() => {
+                                                                    const currentPageProducts = filteredFranchiseLowStockProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage);
+                                                                    return currentPageProducts.length > 0 && currentPageProducts.every(p => {
+                                                                        const selected = document.querySelector(`input[data-franchise-product-id="${p.id}"]`);
+                                                                        return selected?.checked;
+                                                                    });
+                                                                })()}
+                                                                onChange={(e) => {
+                                                                    const currentPageProducts = filteredFranchiseLowStockProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage);
+                                                                    currentPageProducts.forEach(product => {
+                                                                        const checkbox = document.querySelector(`input[data-franchise-product-id="${product.id}"]`);
+                                                                        if (checkbox) checkbox.checked = e.target.checked;
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </th>
                                                         <th className="p-4">สินค้า</th>
                                                         <th className="p-4 text-center">สต็อกปัจจุบัน</th>
                                                         <th className="p-4 text-center">Min Stock</th>
@@ -4723,6 +4854,25 @@
                                                         พบสินค้าที่สต็อกต่ำ <span className="font-bold text-red-600">{filteredFranchiseLowStockProducts.length}</span> รายการ
                                                     </p>
                                                 </div>
+                                                <button
+                                                    onClick={() => {
+                                                        const selectedProducts = filteredFranchiseLowStockProducts.filter(product => {
+                                                            const checkbox = document.querySelector(`input[data-franchise-product-id="${product.id}"]`);
+                                                            return checkbox?.checked;
+                                                        });
+                                                        
+                                                        if (selectedProducts.length === 0) {
+                                                            showError('กรุณาเลือกสินค้าที่ต้องการสร้าง PO');
+                                                            return;
+                                                        }
+                                                        
+                                                        handleAutoCreateFranchisePO(selectedProducts);
+                                                    }}
+                                                    className="bg-red-600 text-white px-6 py-3 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-lg"
+                                                >
+                                                    <Icon icon="fa-magic" className="mr-2" />
+                                                    สร้าง PO สำหรับสินค้าที่เลือก
+                                                </button>
                                             </div>
                                         </div>
                                     )}

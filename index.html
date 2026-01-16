@@ -661,7 +661,7 @@
                }, 100);
            };
            initApp();
-        }, [fetchAllOrders]);
+        }, []); // เปลี่ยน dependency เป็น [] เพื่อให้เรียกแค่ครั้งเดียวตอน mount
 
         useEffect(() => {
             if (page === 'profile' && user) setProfileForm({ username: user.username, phone: user.phone, address: user.address });
@@ -1233,23 +1233,9 @@
                                 if (result.isConfirmed) {
                                     setIsEditModalOpen(false);
                                     
-                                    // เปิด popup ใหม่สำหรับ loading (ไม่ใช้ update เพราะ popup เดิมปิดแล้ว)
-                                    Swal.fire({
-                                        title: 'กำลังอัพเดทข้อมูล...',
-                                        text: 'กรุณารอสักครู่',
-                                        allowOutsideClick: false,
-                                        didOpen: () => Swal.showLoading()
-                                    });
-                                    
-                                    // เรียก fetchAllOrders ใน silent mode
+                                    // เรียก fetchAllOrders ใน silent mode โดยไม่แสดง loading popup
+                                    // เพราะข้อมูลจะอัพเดททันทีโดยไม่ต้องแสดง loading screen
                                     await fetchAllOrders(true, true);
-                                    
-                                    // ใช้ setTimeout เพื่อให้แน่ใจว่า Swal container ยังอยู่ใน DOM ก่อนที่จะปิด
-                                    // และให้ React re-render ก่อนที่จะปิด Swal
-                                    await new Promise(resolve => setTimeout(resolve, 100));
-                                    
-                                    // ปิด Swal หลังจากอัพเดทข้อมูลเสร็จ
-                                    Swal.close();
                                 }
                             });
                         } else { 
@@ -1278,26 +1264,8 @@
                 }).then(async (result) => {
                     if (result.isConfirmed) {
                         // หลังจากผู้ใช้กดเสร็จสิ้น ให้ refresh ข้อมูลใน silent mode (ไม่แสดง loading popup)
-                        // เปิด popup ใหม่สำหรับ loading (ไม่ใช้ update เพราะ popup เดิมปิดแล้ว)
-                        Swal.fire({
-                            title: 'กำลังอัพเดทข้อมูล...',
-                            text: 'กรุณารอสักครู่',
-                            allowOutsideClick: false,
-                            didOpen: () => Swal.showLoading()
-                        });
-                        
-                        // เรียก fetchAllOrders ใน silent mode
+                        // เรียก fetchAllOrders ใน silent mode โดยไม่แสดง loading popup
                         await fetchAllOrders(true, true); // silent=true, forceRefresh=true
-                        
-                        // ใช้ setTimeout เพื่อให้แน่ใจว่า Swal container ยังอยู่ใน DOM ก่อนที่จะปิด
-                        // และให้ React re-render ก่อนที่จะปิด Swal
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        
-                        // ปิด Swal หลังจากอัพเดทข้อมูลเสร็จ
-                        // ตรวจสอบว่ายังมี Swal container อยู่ก่อนปิด
-                        if (document.querySelector('.swal2-container')) {
-                            Swal.close();
-                        }
                     }
                 });
             } 
@@ -1409,19 +1377,8 @@
                         allowOutsideClick: false
                     }).then(async (result) => {
                         if (result.isConfirmed) {
-                            // เปิด popup ใหม่สำหรับ loading (ไม่ใช้ update เพราะ popup เดิมปิดแล้ว)
-                            Swal.fire({
-                                title: 'กำลังอัพเดทข้อมูล...',
-                                text: 'กรุณารอสักครู่',
-                                allowOutsideClick: false,
-                                didOpen: () => Swal.showLoading()
-                            });
-                            
-                            // เรียก fetchAllOrders ใน silent mode
+                            // เรียก fetchAllOrders ใน silent mode โดยไม่แสดง loading popup
                             await fetchAllOrders(true, true);
-                            
-                            // ปิด Swal หลังจากอัพเดทข้อมูลเสร็จ
-                            Swal.close();
                         }
                     });
                 }
@@ -1436,7 +1393,7 @@
                     Swal.fire({ title: 'กำลังอัปเดต...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                      callAPI({ action: 'updateProductStock', productId: product.id, newStock: parseInt(res.value) }).then(r => {
                         Swal.close();
-                         if(r.success) { Toast.fire({icon:'success',title:'สต็อกอัปเดตแล้ว'}); fetchProducts(); }
+                         if(r.success) { Toast.fire({icon:'success',title:'สต็อกอัปเดตแล้ว'}); fetchProducts(true); }
                         else { showError('เกิดข้อผิดพลาดในการอัปเดตสต็อก'); }
                     }).catch(error => {
                         Swal.close();
@@ -1505,7 +1462,7 @@
                     showSuccess('สำเร็จ', 'อัปเดตข้อมูลสินค้าเรียบร้อย');
                     setIsEditProductModalOpen(false);
                     setEditingProduct(null);
-                    fetchProducts();
+                    fetchProducts(true);
                 } else {
                     showError(res?.message || 'เกิดข้อผิดพลาดในการอัปเดตสินค้า');
                 }
@@ -1521,7 +1478,7 @@
                     Swal.fire({ title: 'กำลังเติมสต็อก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                      callAPI({ action: 'restockProduct', productId: product.id, qty: parseInt(res.value), note: 'Admin Restock', userEmail: user.email }).then(r => {
                         Swal.close();
-                         if(r.success) { Toast.fire({icon:'success',title:`เติมสต็อก +${res.value} เรียบร้อย`}); fetchProducts(); }
+                         if(r.success) { Toast.fire({icon:'success',title:`เติมสต็อก +${res.value} เรียบร้อย`}); fetchProducts(true); }
                         else { showError('เกิดข้อผิดพลาดในการเติมสต็อก'); }
                     }).catch(error => {
                         Swal.close();
@@ -1580,7 +1537,7 @@
                         minStock: 5,
                         franchisePrice: 0
                     });
-                    fetchFranchiseStock(false, true);
+                    fetchFranchiseStock(true, true);
                 } else {
                     showError(res?.message || 'เกิดข้อผิดพลาดในการเพิ่มสินค้า');
                 }
@@ -1617,7 +1574,7 @@
 
                 if (res && res.success) {
                     showSuccess('สำเร็จ', res.message || `นำเข้าสินค้า ${res.importedProducts?.length || 0} รายการเรียบร้อย`);
-                    fetchFranchiseStock(false, true);
+                    fetchFranchiseStock(true, true);
                     fetchOrdersWithImportStatus(); // รีเฟรชสถานะออเดอร์
                 } else {
                     if (res?.alreadyImported) {
@@ -1690,7 +1647,7 @@
                     showSuccess('สำเร็จ', `อัปเดตสต็อก ${successCount} รายการเรียบร้อย`);
                     setIsBulkEditModalOpen(false);
                     setSelectedProductsForBulkEdit([]); // ล้างการเลือก
-                    fetchFranchiseStock(false, true);
+                    fetchFranchiseStock(true, true);
                 } else {
                     showError(res?.message || 'เกิดข้อผิดพลาดในการอัปเดตสต็อก');
                 }
@@ -1789,7 +1746,7 @@
                 if (res && res.success) {
                     showSuccess('สำเร็จ', `เพิ่มสินค้า ${res.productId || 'ใหม่'} เรียบร้อย`);
                     setIsAddProductModalOpen(false);
-                    fetchProducts();
+                    fetchProducts(true);
                 } else {
                     showError(res?.message || 'เกิดข้อผิดพลาดในการเพิ่มสินค้า');
                 }
@@ -1954,7 +1911,7 @@
                     fetchFranchiseStock(true);
                 } else {
                     fetchPOs(true);
-                    fetchProducts();
+                    fetchProducts(true);
                 }
             } else {
                 showError(res.message || 'เกิดข้อผิดพลาด');
@@ -2051,7 +2008,7 @@
                     Toast.fire({ icon: 'success', title: 'สร้าง PO เรียบร้อย' });
                 }
                 fetchPOs(true);
-                fetchProducts();
+                fetchProducts(true);
             } else {
                 showError('ไม่สามารถสร้าง PO ได้');
             }
@@ -3524,7 +3481,31 @@
                                                 <Icon icon="fa-truck" /> ส่งสินค้า ({selectedOrdersForShipping.length})
                                             </button>
                                         )}
-                                        <button onClick={() => fetchAllOrders(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition"><Icon icon="fa-sync" /> Refresh</button>
+                                        <button 
+                                            onClick={async () => {
+                                                // แสดง popup กำลังดึงข้อมูล
+                                                Swal.fire({ 
+                                                    title: 'กำลังดึงข้อมูล...', 
+                                                    allowOutsideClick: false, 
+                                                    didOpen: () => Swal.showLoading() 
+                                                });
+                                                // ดึงข้อมูลใหม่ (force refresh)
+                                                const result = await fetchAllOrders(false, true);
+                                                Swal.close();
+                                                if (result && result.success) {
+                                                    Toast.fire({ 
+                                                        icon: 'success', 
+                                                        title: 'อัพเดทข้อมูลเรียบร้อย',
+                                                        timer: 1500
+                                                    });
+                                                } else {
+                                                    showError('ไม่สามารถดึงข้อมูลได้');
+                                                }
+                                            }} 
+                                            className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition"
+                                        >
+                                            <Icon icon="fa-sync" /> Refresh
+                                        </button>
                                     </div>
                                 </div>
                                 {filteredAdminOrders.map(order => {
@@ -3599,7 +3580,7 @@
                                     <div className="flex justify-between items-center mb-4">
                                         <h2 className="text-xl font-bold text-gray-900">ประวัติการสั่งซื้อ</h2>
                                         <button 
-                                            onClick={() => fetchHistory(false, true)} 
+                                            onClick={() => fetchHistory(true, true)} 
                                             className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-bold transition active:scale-95"
                                             title="รีเฟรชข้อมูล"
                                         >
@@ -3762,7 +3743,7 @@
                                             >
                                                 <Icon icon="fa-plus" /> เพิ่มสินค้า
                                             </button>
-                                            <button onClick={() => fetchFranchiseStock(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                            <button onClick={() => fetchFranchiseStock(true, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
                                         </div>
@@ -4137,7 +4118,7 @@
                                 <div className="fade-in max-w-6xl mx-auto space-y-4 text-gray-800 font-normal">
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="text-xl font-bold">ประวัติสต็อกแฟรนไชส์</h3>
-                                        <button onClick={() => fetchFranchiseStockLog(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                        <button onClick={() => fetchFranchiseStockLog(true, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                             <Icon icon="fa-sync" /> Refresh
                                         </button>
                                     </div>
@@ -4615,7 +4596,7 @@
                                             </p>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => fetchFranchiseStock(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                            <button onClick={() => fetchFranchiseStock(true, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
                                             {filteredLowStockFranchiseProducts.length > 0 && (
@@ -4867,7 +4848,7 @@
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="text-xl font-bold">Purchase Order (PO)</h3>
                                         <div className="flex gap-2">
-                                            <button onClick={() => fetchPOs(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                            <button onClick={() => fetchPOs(true, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
                                             <button onClick={openCreatePOModal} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm">

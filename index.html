@@ -282,6 +282,9 @@
         const [franchiseStockLogStartDate, setFranchiseStockLogStartDate] = useState('');
         const [franchiseStockLogEndDate, setFranchiseStockLogEndDate] = useState('');
         const [isAddFranchiseProductModalOpen, setIsAddFranchiseProductModalOpen] = useState(false);
+        const [isAddFromShopModalOpen, setIsAddFromShopModalOpen] = useState(false);
+        const [selectedShopProducts, setSelectedShopProducts] = useState([]); // เปลี่ยนเป็น array สำหรับหลายรายการ
+        const [shopProductSearch, setShopProductSearch] = useState('');
         const [isImportFromOrderModalOpen, setIsImportFromOrderModalOpen] = useState(false);
         const [availableProducts, setAvailableProducts] = useState([]);
         const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -1251,14 +1254,40 @@
         };
 
         const updateOrderStatusFn = async (orderId, status, tracking = '') => {
+            // ตรวจสอบว่าออเดอร์มาจาก PO หรือไม่ (สำหรับการอนุมัติเงิน)
+            const order = allOrders.find(o => o.id === orderId);
+            const isFromPO = order && order.discountInfo && String(order.discountInfo).startsWith('FROM_PO:');
+            
+            // ถ้าเป็นออเดอร์จาก PO และกำลังอนุมัติเงิน ให้ถามก่อนว่าได้รับเงินแล้วหรือยัง
+            if (isFromPO && status === 'ชำระเงินแล้ว') {
+                const orderTotal = Number(order.total) || 0;
+                const result = await Swal.fire({
+                    title: 'ยืนยันการรับเงิน',
+                    html: `ได้รับเงินจำนวน <strong>฿${orderTotal.toLocaleString()}</strong> (จากออเดอร์ PO) แล้วหรือไม่?<br><br>ออเดอร์นี้สร้างจาก PO และยังไม่มีการชำระเงิน`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'ใช่',
+                    cancelButtonText: 'ไม่ใช่',
+                    confirmButtonColor: THEME_COLOR
+                });
+                
+                if (!result.isConfirmed) {
+                    // ถ้ากด "ไม่ใช่" ไม่ต้องทำอะไร
+                    return;
+                }
+            }
+            
             Swal.fire({ title: 'กำลังทำรายการ...', text: 'กรุณารอสักครู่', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const res = await callAPI({ action: 'updateOrderStatus', orderId, status, tracking });
             if (res.success) { 
+                // ถ้าได้รับเงินแล้วจาก PO ให้เปลี่ยนสถานะเป็น "ชำระเงินแล้ว" (แต่ถ้าเป็นกรณีอื่นๆ ให้ใช้ status ที่ส่งมา)
+                const finalStatus = isFromPO && status === 'ชำระเงินแล้ว' ? 'ชำระเงินแล้ว' : status;
+                
                 // อัพเดท popup เดิมเป็น success (ไม่ปิดและเปิดใหม่)
                 Swal.fire({
                     icon: 'success',
                     title: 'ทำรายการเสร็จแล้ว',
-                    text: `อัปเดตเป็น ${status} แล้ว`,
+                    text: `อัปเดตเป็น ${finalStatus} แล้ว`,
                     confirmButtonText: 'เสร็จสิ้น',
                     allowOutsideClick: false
                 }).then(async (result) => {
@@ -2015,6 +2044,94 @@
             
             if (failedCount > 0) {
                 console.warn(`${failedCount} PO creation(s) failed`);
+            }
+        };
+
+        const handleAutoCreateFranchisePO = async (selectedProducts) => {
+            if (!selectedProducts || selectedProducts.length === 0) {
+                showError('กรุณาเลือกสินค้าที่ต้องการสร้าง PO');
+                return;
+            }
+
+            // จัดกลุ่มสินค้าตามซัพพลายเออร์
+            const productsBySupplier = {};
+            selectedProducts.forEach(product => {
+                const supplier = product.supplier || 'ไม่ระบุ';
+                if (!productsBySupplier[supplier]) {
+                    productsBySupplier[supplier] = [];
+                }
+                // คำนวณจำนวนที่ต้องสั่ง (minStock * 2 - stock ปัจจุบัน)
+                const minStock = Number(product.minStock) || 5;
+                const currentStock = Number(product.stock) || 0;
+                const orderQty = Math.max(minStock * 2 - currentStock, minStock);
+                
+                productsBySupplier[supplier].push({
+                    productId: product.id,
+                    productName: product.name,
+                    qty: orderQty,
+                    price: product.price || 0
+                });
+            });
+
+            // แยก PO ตามซัพพลายเออร์อัตโนมัติ
+            const suppliers = Object.keys(productsBySupplier);
+            let createdCount = 0;
+            let failedCount = 0;
+            
+            Swal.fire({ 
+                title: 'กำลังสร้าง PO...', 
+                html: `กำลังสร้าง PO สำหรับ ${suppliers.length} ซัพพลายเออร์`,
+                didOpen: () => Swal.showLoading(), 
+                allowOutsideClick: false 
+            });
+
+            // สร้าง PO แยกตามซัพพลายเออร์
+            for (const supplier of suppliers) {
+                try {
+                    // เพิ่ม delay เล็กน้อยเพื่อให้แต่ละ PO มี timestamp ที่แตกต่างกัน
+                    if (createdCount > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 100)); // delay 100ms
+                    }
+                    
+                    const res = await callAPI({
+                        action: 'createFranchisePO',
+                        poData: {
+                            supplier: supplier,
+                            items: productsBySupplier[supplier],
+                            expectedDate: '',
+                            notes: `สร้างอัตโนมัติจาก Stock Alert - ${new Date().toLocaleDateString('th-TH')}`
+                        },
+                        userEmail: user.email
+                    });
+
+                    if (res && res.success) {
+                        createdCount++;
+                    } else {
+                        failedCount++;
+                    }
+                } catch (error) {
+                    failedCount++;
+                    console.error('Error creating Franchise PO for supplier:', supplier, error);
+                }
+            }
+
+            Swal.close();
+
+            if (createdCount > 0) {
+                if (suppliers.length > 1) {
+                    showSuccess('สำเร็จ', `สร้าง PO เรียบร้อย ${createdCount} ใบ (แยกตามซัพพลายเออร์)`);
+                } else {
+                    Toast.fire({ icon: 'success', title: 'สร้าง PO เรียบร้อย' });
+                }
+                // Refresh ข้อมูล Franchise PO และ Stock
+                await fetchFranchisePOs(true, true);
+                await fetchFranchiseStock(true, true);
+            } else {
+                showError('ไม่สามารถสร้าง PO ได้');
+            }
+            
+            if (failedCount > 0) {
+                console.warn(`${failedCount} Franchise PO creation(s) failed`);
             }
         };
 
@@ -3743,6 +3860,25 @@
                                             >
                                                 <Icon icon="fa-plus" /> เพิ่มสินค้า
                                             </button>
+                                            <button 
+                                                onClick={async () => {
+                                                    setIsAddFromShopModalOpen(true);
+                                                    setSelectedShopProducts([]);
+                                                    setShopProductSearch('');
+                                                    // ดึงรายการสินค้าจาก Shop
+                                                    try {
+                                                        const res = await callAPI({ action: 'getAvailableProducts' });
+                                                        if (res.success) {
+                                                            setAvailableProducts(res.products || []);
+                                                        }
+                                                    } catch (error) {
+                                                        showError('ไม่สามารถดึงรายการสินค้าได้');
+                                                    }
+                                                }}
+                                                className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition flex items-center gap-1"
+                                            >
+                                                <Icon icon="fa-store" /> เพิ่มสินค้าจาก Shop
+                                            </button>
                                             <button onClick={() => fetchFranchiseStock(true, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
@@ -4087,6 +4223,100 @@
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2 justify-end">
+                                                        <button 
+                                                            onClick={async () => {
+                                                                Swal.fire({ title: 'กำลังโหลด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                                                const res = await callAPI({ action: 'getFranchisePO', poId: po.id, userEmail: user.email });
+                                                                Swal.close();
+                                                                if (res.success) {
+                                                                    Swal.fire({
+                                                                        title: `รายละเอียด ${po.id}`,
+                                                                        html: `
+                                                                            <div class="text-left">
+                                                                                <p><strong>ซัพพลายเออร์:</strong> ${res.po.supplier || 'ไม่ระบุ'}</p>
+                                                                                <p><strong>สถานะ:</strong> ${res.po.status}</p>
+                                                                                <p><strong>ยอดรวม:</strong> ฿${Number(res.po.totalAmount || 0).toLocaleString()}</p>
+                                                                                ${res.po.createdDate ? `<p><strong>วันที่สร้าง:</strong> ${res.po.createdDate}</p>` : ''}
+                                                                                ${res.po.notes ? `<p><strong>หมายเหตุ:</strong> ${res.po.notes}</p>` : ''}
+                                                                                <hr class="my-3">
+                                                                                <p><strong>รายการสินค้า:</strong></p>
+                                                                                <ul class="list-disc list-inside" style="margin-left: 10px;">
+                                                                                    ${(res.po.items || []).map(item => `<li>${item.productName || item.name} x${item.qty || item.qtyOrdered} @ ฿${Number(item.price || item.pricePerUnit || 0).toLocaleString()} = ฿${Number((item.price || item.pricePerUnit || 0) * (item.qty || item.qtyOrdered || 0)).toLocaleString()}</li>`).join('')}
+                                                                                </ul>
+                                                                            </div>
+                                                                        `,
+                                                                        confirmButtonColor: THEME_COLOR
+                                                                    });
+                                                                } else {
+                                                                    showError(res.message || 'ไม่สามารถโหลดข้อมูล PO ได้');
+                                                                }
+                                                            }}
+                                                            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition"
+                                                        >
+                                                            <Icon icon="fa-eye" className="mr-1" /> ดูรายละเอียด
+                                                        </button>
+                                                        {po.status === 'รออนุมัติ' && (
+                                                            <button 
+                                                                onClick={async () => {
+                                                                    Swal.fire({
+                                                                        title: 'ยืนยันการสั่งซื้อ',
+                                                                        html: `คุณต้องการส่ง PO <strong>${po.id}</strong> ไปยังหน้า Orders ฝั่งแอดมินเพื่อสั่งซื้อสินค้าหรือไม่?<br><br>ยอดรวม: <strong>฿${Number(po.totalAmount).toLocaleString()}</strong>`,
+                                                                        icon: 'question',
+                                                                        showCancelButton: true,
+                                                                        confirmButtonText: 'ยืนยัน',
+                                                                        cancelButtonText: 'ยกเลิก',
+                                                                        confirmButtonColor: THEME_COLOR
+                                                                    }).then(async (result) => {
+                                                                        if (result.isConfirmed) {
+                                                                            Swal.fire({ 
+                                                                                title: 'กำลังส่งคำสั่งซื้อ...', 
+                                                                                allowOutsideClick: false, 
+                                                                                didOpen: () => Swal.showLoading() 
+                                                                            });
+                                                                            
+                                                                            try {
+                                                                                // ดึงข้อมูล PO ละเอียด
+                                                                                const poDetailRes = await callAPI({ action: 'getFranchisePO', poId: po.id, userEmail: user.email });
+                                                                                if (!poDetailRes.success || !poDetailRes.po) {
+                                                                                    Swal.close();
+                                                                                    showError('ไม่สามารถดึงข้อมูล PO ได้');
+                                                                                    return;
+                                                                                }
+                                                                                
+                                                                                // ส่งไปสร้าง Order ที่หน้าแอดมิน
+                                                                                const createOrderRes = await callAPI({
+                                                                                    action: 'createOrderFromFranchisePO',
+                                                                                    poId: po.id,
+                                                                                    poData: poDetailRes.po,
+                                                                                    userEmail: user.email
+                                                                                });
+                                                                                
+                                                                                Swal.close();
+                                                                                
+                                                                                if (createOrderRes.success) {
+                                                                                    Toast.fire({
+                                                                                        icon: 'success',
+                                                                                        title: 'ส่งคำสั่งซื้อสำเร็จ',
+                                                                                        text: `ออเดอร์ ${createOrderRes.orderId} ถูกสร้างที่หน้าแอดมินแล้ว`,
+                                                                                        timer: 3000
+                                                                                    });
+                                                                                    // Refresh ข้อมูล PO
+                                                                                    await fetchFranchisePOs(true, true);
+                                                                                } else {
+                                                                                    showError(createOrderRes.message || 'ไม่สามารถสร้างออเดอร์ได้');
+                                                                                }
+                                                                            } catch (error) {
+                                                                                Swal.close();
+                                                                                showError('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'));
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }}
+                                                                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition"
+                                                            >
+                                                                <Icon icon="fa-shopping-cart" className="mr-1" /> สั่งสินค้า
+                                                            </button>
+                                                        )}
                                                         <button 
                                                             onClick={async () => {
                                                                 Swal.fire({ title: 'กำลังโหลด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -5922,6 +6152,216 @@
                                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold"
                                 >
                                     <Icon icon="fa-save" className="mr-2" /> บันทึกการแก้ไข
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Add From Shop Modal */}
+                {isAddFromShopModalOpen && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 text-gray-800 font-normal">
+                        <div className="absolute inset-0 bg-black bg-opacity-70" onClick={() => setIsAddFromShopModalOpen(false)}></div>
+                        <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl z-10 overflow-hidden flex flex-col max-h-[90vh] font-normal">
+                            <div className="p-4 bg-blue-600 text-white font-bold flex justify-between items-center">
+                                <span><Icon icon="fa-store" className="mr-2" />เพิ่มสินค้าจาก Shop</span>
+                                <button onClick={() => setIsAddFromShopModalOpen(false)}><Icon icon="fa-times"/></button>
+                            </div>
+                            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+                                <div className="space-y-4">
+                                    {/* Search */}
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">ค้นหาสินค้า</label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-3 text-gray-400"><Icon icon="fa-search"/></span>
+                                            <input
+                                                type="text"
+                                                className="w-full pl-10 p-3 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="ค้นหาสินค้า..."
+                                                value={shopProductSearch}
+                                                onChange={e => setShopProductSearch(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Product List */}
+                                    <div className="max-h-64 overflow-y-auto border rounded-lg bg-white">
+                                        {availableProducts
+                                            .filter(p => !shopProductSearch.trim() || p.name.toLowerCase().includes(shopProductSearch.toLowerCase()))
+                                            .map(product => {
+                                                const isSelected = selectedShopProducts.find(sp => sp.id === product.id);
+                                                return (
+                                                    <div
+                                                        key={product.id}
+                                                        onClick={() => {
+                                                            const existingIndex = selectedShopProducts.findIndex(sp => sp.id === product.id);
+                                                            if (existingIndex >= 0) {
+                                                                // ถ้ามีอยู่แล้ว ให้ลบออก
+                                                                setSelectedShopProducts(selectedShopProducts.filter(sp => sp.id !== product.id));
+                                                            } else {
+                                                                // ถ้ายังไม่มี ให้เพิ่มเข้าไป
+                                                                setSelectedShopProducts([...selectedShopProducts, { ...product, qty: '0' }]);
+                                                            }
+                                                        }}
+                                                        className={`p-3 border-b last:border-b-0 cursor-pointer transition flex justify-between items-center ${
+                                                            isSelected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <div className="flex-1">
+                                                            <div className="font-bold text-sm">{product.name}</div>
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                Product ID: <span className="font-mono">{product.id}</span>
+                                                            </div>
+                                                            <div className="text-xs text-gray-500">
+                                                                ฿{Number(product.franchisePrice || product.price || 0).toLocaleString()} / {product.unit || 'ชิ้น'}
+                                                                {product.supplier && <span className="ml-2">| ซัพพลายเออร์: {product.supplier}</span>}
+                                                            </div>
+                                                        </div>
+                                                        {isSelected && (
+                                                            <Icon icon="fa-check-circle" className="text-blue-600 text-xl" />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        }
+                                        {availableProducts.filter(p => !shopProductSearch.trim() || p.name.toLowerCase().includes(shopProductSearch.toLowerCase())).length === 0 && (
+                                            <div className="p-4 text-center text-gray-400 text-sm">ไม่พบสินค้า</div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Selected Products List with Qty Input */}
+                                    {selectedShopProducts.length > 0 && (
+                                        <div className="mt-4">
+                                            <div className="font-bold text-sm text-gray-700 mb-2">รายการสินค้าที่เลือก ({selectedShopProducts.length} รายการ):</div>
+                                            <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg bg-white p-3">
+                                                {selectedShopProducts.map((item, index) => (
+                                                    <div key={item.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div className="flex-1">
+                                                                <div className="font-bold text-sm text-blue-900">{item.name}</div>
+                                                                <div className="text-xs text-gray-500 mt-1">Product ID: <span className="font-mono">{item.id}</span></div>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedShopProducts(selectedShopProducts.filter(sp => sp.id !== item.id));
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 text-lg"
+                                                            >
+                                                                <Icon icon="fa-times" />
+                                                            </button>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-700 mb-1">จำนวนเข้าสต็อก *</label>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                                                placeholder="กรอกจำนวน"
+                                                                value={item.qty}
+                                                                onChange={e => {
+                                                                    const updated = [...selectedShopProducts];
+                                                                    updated[index].qty = e.target.value;
+                                                                    setSelectedShopProducts(updated);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="p-5 border-t bg-white flex justify-end gap-3">
+                                <button
+                                    onClick={() => {
+                                        setIsAddFromShopModalOpen(false);
+                                        setSelectedShopProducts([]);
+                                        setShopProductSearch('');
+                                    }}
+                                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition font-bold"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (selectedShopProducts.length === 0) {
+                                            showError('กรุณาเลือกสินค้าอย่างน้อย 1 รายการ');
+                                            return;
+                                        }
+                                        
+                                        // ตรวจสอบว่าทุกรายการมีจำนวน
+                                        const invalidItems = selectedShopProducts.filter(item => !item.qty || Number(item.qty) <= 0);
+                                        if (invalidItems.length > 0) {
+                                            showError(`กรุณากรอกจำนวนที่ถูกต้องสำหรับสินค้า: ${invalidItems.map(i => i.name).join(', ')}`);
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            Swal.fire({ 
+                                                title: 'กำลังเพิ่มสินค้า...', 
+                                                html: `กำลังเพิ่ม ${selectedShopProducts.length} รายการ`,
+                                                didOpen: () => Swal.showLoading(), 
+                                                allowOutsideClick: false 
+                                            });
+                                            
+                                            let successCount = 0;
+                                            let failCount = 0;
+                                            const results = [];
+                                            
+                                            // เพิ่มสินค้าแต่ละรายการ
+                                            for (const item of selectedShopProducts) {
+                                                try {
+                                                    const res = await callAPI({
+                                                        action: 'addFranchiseStockFromShop',
+                                                        productId: item.id,
+                                                        qty: Number(item.qty),
+                                                        note: `เพิ่มสินค้าจาก Shop: ${item.name}`,
+                                                        userEmail: user.email
+                                                    });
+                                                    
+                                                    if (res && res.success) {
+                                                        successCount++;
+                                                        results.push({ name: item.name, qty: item.qty, unit: item.unit, success: true });
+                                                    } else {
+                                                        failCount++;
+                                                        results.push({ name: item.name, success: false, error: res?.message || 'เกิดข้อผิดพลาด' });
+                                                    }
+                                                } catch (error) {
+                                                    failCount++;
+                                                    results.push({ name: item.name, success: false, error: error.message || 'Unknown error' });
+                                                }
+                                            }
+                                            
+                                            Swal.close();
+                                            
+                                            if (successCount > 0) {
+                                                const successMsg = results.filter(r => r.success).map(r => 
+                                                    `${r.name} (${r.qty} ${r.unit || 'ชิ้น'})`
+                                                ).join(', ');
+                                                
+                                                if (failCount === 0) {
+                                                    showSuccess('สำเร็จ', `เพิ่มสินค้า ${successCount} รายการเข้าสต็อกเรียบร้อย`);
+                                                } else {
+                                                    showSuccess('เพิ่มบางส่วน', `เพิ่มสำเร็จ ${successCount} รายการ, ล้มเหลว ${failCount} รายการ`);
+                                                }
+                                                
+                                                setIsAddFromShopModalOpen(false);
+                                                setSelectedShopProducts([]);
+                                                setShopProductSearch('');
+                                                fetchFranchiseStock(true, true);
+                                            } else {
+                                                showError('ไม่สามารถเพิ่มสินค้าได้ทั้งหมด');
+                                            }
+                                        } catch (error) {
+                                            Swal.close();
+                                            showError('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'));
+                                        }
+                                    }}
+                                    disabled={selectedShopProducts.length === 0 || selectedShopProducts.some(item => !item.qty || Number(item.qty) <= 0)}
+                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                >
+                                    <Icon icon="fa-check" className="mr-2" /> เพิ่มเข้าสต็อก ({selectedShopProducts.length})
                                 </button>
                             </div>
                         </div>

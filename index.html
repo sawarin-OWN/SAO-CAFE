@@ -8,7 +8,7 @@
     <title>SAO CAFE APP</title>
     
     <link rel="icon" href="https://storage.googleapis.com/glide-prod.appspot.com/uploads-v2/ZPQ1QSrzcL0RxpekC12M/pub/iHel4QU56KUUXyOtzaCo.png">
-    <link rel="apple-touch-icon" href="https://storage.googleapis.com/glide-prod.appspot.com/uploads-v2/ZPQ1QSrzcL0RxpekC12M/pub/iHel4QU56KUUXyOtzaCo.png">
+    <link rel="apple-touch-icon" href="https://storage.googleapis.com/glide-prod.appspot.com/uploads-v2/ZPQ1QSrzcL0RxpekC12M/pub/LfolY3an8LNo51RM9Ilo.jpg">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -160,7 +160,7 @@
 โทร. 061-732-1346 
 เลขประจำตัวผู้เสียภาษี 0105567121929`;
 
-      // --- Helper Functions ---
+       // --- Helper Functions ---
       const Icon = ({ icon, className }) => <i className={`fas ${icon} ${className || ''}`}></i>;
 
       const parseThaiDate = (dateStr) => {
@@ -327,6 +327,7 @@
         const [currentPage, setCurrentPage] = useState(1);
         const [stockManagementPage, setStockManagementPage] = useState(1);
         const [stockAlertPage, setStockAlertPage] = useState(1);
+        const [franchiseStockPage, setFranchiseStockPage] = useState(1);
         const [franchiseStockAlertPage, setFranchiseStockAlertPage] = useState(1);
         const itemsPerPage = 50;
 
@@ -336,8 +337,6 @@
         const [dateEndInput, setDateEndInput] = useState(''); // สำหรับเก็บค่าที่เลือก (รอกดปุ่มค้นหา)
         const [adminStatusFilter, setAdminStatusFilter] = useState('All');
         const [orderSearchTerm, setOrderSearchTerm] = useState(''); // ค้นหาแบบ real-time (ไม่ต้องกดปุ่ม)
-        const [franchiseStockLogStartDateInput, setFranchiseStockLogStartDateInput] = useState(''); // วันที่ที่เลือก (รอกดปุ่มค้นหา)
-        const [franchiseStockLogEndDateInput, setFranchiseStockLogEndDateInput] = useState(''); // วันที่ที่เลือก (รอกดปุ่มค้นหา)
         const [franchiseStockLogSearchTerm, setFranchiseStockLogSearchTerm] = useState(''); // ค้นหาแบบ real-time (ไม่ต้องกดปุ่ม)
 
         const [profileForm, setProfileForm] = useState({ username: '', phone: '', address: '' });
@@ -364,15 +363,6 @@
         const showSuccess = (title, text) => Swal.fire({ icon: 'success', title, text, confirmButtonColor: THEME_COLOR });
         const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
         
-        // Search loading popup
-        const showSearchLoading = () => {
-            Swal.fire({
-                title: 'กำลังค้นหา...',
-                text: 'กรุณารอสักครู่',
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
-        };
 
         // --- Fetch Data ---
         const fetchProducts = useCallback(async (forceRefresh = false) => { 
@@ -496,7 +486,7 @@
             }
         }, [user, franchiseStockCache, franchiseStockCacheTimestamp]);
 
-        const fetchFranchisePOs = useCallback(async (silent=false) => {
+        const fetchFranchisePOs = useCallback(async (silent=false, forceRefresh = false) => {
             if (!user?.email) return { success: false, message: 'User not logged in' };
             if(!silent) Swal.fire({ title: 'กำลังดึงข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
@@ -510,7 +500,7 @@
             }
         }, [user]);
 
-        const fetchFranchiseStockLog = useCallback(async (silent=false) => {
+        const fetchFranchiseStockLog = useCallback(async (silent=false, forceRefresh = false) => {
             if (!user?.email) return { success: false, message: 'User not logged in' };
             if(!silent) Swal.fire({ title: 'กำลังดึงข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
@@ -527,7 +517,7 @@
                 if(!silent) Swal.close();
                 return { success: false, message: error.message || 'Unknown error' };
             }
-        }, [user, franchiseStockLogStartDate, franchiseStockLogEndDate]); // จะถูกเรียกเมื่อ franchiseStockLogStartDate หรือ franchiseStockLogEndDate เปลี่ยน (จากการกดปุ่มค้นหา)
+        }, [user, franchiseStockLogStartDate, franchiseStockLogEndDate]); // จะถูกเรียกเมื่อ franchiseStockLogStartDate หรือ franchiseStockLogEndDate เปลี่ยน (real-time)
 
         const fetchDashboardData = useCallback(async (silent = false) => {
             setIsDashboardLoading(true);
@@ -569,7 +559,7 @@
             if(newPage !== 'stock_alert') setStockAlertPage(1);
             if(newPage !== 'franchise_stock_alert') setFranchiseStockAlertPage(1);
             
-            if(['admin_orders', 'history', 'tax_invoice', 'profile', 'purchase_order', 'stock_alert', 'admin_dashboard', 'franchise_stock', 'franchise_po', 'franchise_stock_log', 'franchise_stock_alert'].includes(newPage)) {
+            if(['admin_orders', 'history', 'tax_invoice', 'profile', 'purchase_order', 'stock_alert', 'admin_dashboard', 'franchise_stock', 'franchise_stock_alert', 'franchise_po', 'franchise_stock_log'].includes(newPage)) {
                 const promises = [];
                 let needsLoading = false;
                 
@@ -593,6 +583,10 @@
                     promises.push(fetchFranchiseStock(true));
                     needsLoading = true;
                 }
+                if(newPage === 'franchise_stock_alert' && user?.customerType === 'franchise') {
+                    promises.push(fetchFranchiseStock(true));
+                    needsLoading = true;
+                }
                 if(newPage === 'franchise_po' && user?.customerType === 'franchise') {
                     promises.push(fetchFranchisePOs(true));
                     needsLoading = true;
@@ -601,13 +595,9 @@
                     promises.push(fetchFranchiseStockLog(true));
                     needsLoading = true;
                 }
-                if((newPage === 'franchise_stock' || newPage === 'franchise_stock_alert') && user?.customerType === 'franchise') {
-                    promises.push(fetchFranchiseStock(true));
-                    needsLoading = true;
-                    if(newPage === 'franchise_stock') {
-                        // ดึงข้อมูลออเดอร์ด้วยเพื่อใช้ใน Import From Order
-                        promises.push(fetchHistory(true));
-                    }
+                if(newPage === 'franchise_stock' && user?.customerType === 'franchise') {
+                    // ดึงข้อมูลออเดอร์ด้วยเพื่อใช้ใน Import From Order
+                    promises.push(fetchHistory(true));
                 }
                 
                 // ตรวจสอบว่ามี promises หรือไม่ และต้องแสดง loading หรือไม่
@@ -840,12 +830,10 @@
             if (!term || term.trim() === '') {
                 setSearchResults([]);
                 setIsSearching(false);
-                Swal.close();
                 return;
             }
             
             setIsSearching(true);
-            showSearchLoading();
             try {
                 console.log('Searching for:', term);
                 const res = await callAPI({ action: 'searchProducts', searchTerm: term, userEmail: user?.email || null });
@@ -863,7 +851,6 @@
                 setSearchResults([]);
             } finally {
                 setIsSearching(false);
-                Swal.close();
             }
         }, [user]);
         
@@ -895,12 +882,10 @@
             if (!term || term.trim() === '') {
                 setStockSearchResults([]);
                 setIsStockSearching(false);
-                Swal.close();
                 return;
             }
             
             setIsStockSearching(true);
-            showSearchLoading();
             try {
                 console.log('Stock searching for:', term);
                 const res = await callAPI({ action: 'searchProducts', searchTerm: term, userEmail: user?.email || null });
@@ -918,7 +903,6 @@
                 setStockSearchResults([]);
             } finally {
                 setIsStockSearching(false);
-                Swal.close();
             }
         }, [user]);
         
@@ -944,6 +928,17 @@
                 }
             };
         }, [stockSearchTerm, performStockSearch]);
+        
+        // Real-time search for franchise stock log - debounce date changes
+        useEffect(() => {
+            if (page === 'franchise_stock_log' && user?.customerType === 'franchise') {
+                const timeout = setTimeout(() => {
+                    fetchFranchiseStockLog(true); // silent mode
+                }, 500); // 500ms debounce
+                
+                return () => clearTimeout(timeout);
+            }
+        }, [franchiseStockLogStartDate, franchiseStockLogEndDate, page, user, fetchFranchiseStockLog]);
         
         // Filter ก่อน pagination - ใช้ searchResults ถ้ามีการค้นหา
         const filteredProductsList = useMemo(() => {
@@ -987,13 +982,23 @@
                 p.name.toLowerCase().includes(stockAlertSearch.toLowerCase())
             );
         }, [lowStockProducts, stockAlertSearch]);
-
-        // นับจำนวนสินค้าที่สต็อกต่ำ
-        const lowStockCount = lowStockProducts.length;
-
-        // Franchise Stock Alert: คำนวณสินค้าที่สต็อกต่ำสำหรับ franchise
-        const franchiseLowStockProducts = useMemo(() => {
-            if (!franchiseStock || franchiseStock.length === 0) return [];
+        
+        // Filter และ paginate franchise stock
+        const filteredFranchiseStock = useMemo(() => {
+            return franchiseStock.filter(p => 
+                p.name.toLowerCase().includes(franchiseStockSearchTerm.toLowerCase())
+            );
+        }, [franchiseStock, franchiseStockSearchTerm]);
+        
+        const displayedFranchiseStock = useMemo(() => {
+            return filteredFranchiseStock.slice(
+                (franchiseStockPage - 1) * itemsPerPage,
+                franchiseStockPage * itemsPerPage
+            );
+        }, [filteredFranchiseStock, franchiseStockPage]);
+        
+        // Franchise Stock Alert: คำนวณสินค้าที่สต็อกต่ำจาก franchiseStock
+        const lowStockFranchiseProducts = useMemo(() => {
             return franchiseStock.filter(p => {
                 const stock = Number(p.stock) || 0;
                 const minStock = Number(p.minStock) || 5;
@@ -1004,16 +1009,16 @@
                 return aStock - bStock; // เรียงจากสต็อกน้อยไปมาก
             });
         }, [franchiseStock]);
-
-        // Filter ก่อน pagination - ค้นหาจากทั้งหมด (franchise)
-        const filteredFranchiseLowStockProducts = useMemo(() => {
-            return franchiseLowStockProducts.filter(p => 
+        
+        // Filter ก่อน pagination - ค้นหาจากทั้งหมด
+        const filteredLowStockFranchiseProducts = useMemo(() => {
+            return lowStockFranchiseProducts.filter(p => 
                 p.name.toLowerCase().includes(franchiseStockAlertSearch.toLowerCase())
             );
-        }, [franchiseLowStockProducts, franchiseStockAlertSearch]);
+        }, [lowStockFranchiseProducts, franchiseStockAlertSearch]);
 
-        // นับจำนวนสินค้าที่สต็อกต่ำ (franchise)
-        const franchiseLowStockCount = franchiseLowStockProducts.length;
+        // นับจำนวนสินค้าที่สต็อกต่ำ
+        const lowStockCount = lowStockProducts.length;
 
         // --- Handlers ---
         const handleLogin = async (e) => { 
@@ -1630,9 +1635,7 @@
 
         const openBulkEditModal = () => {
             // เตรียมข้อมูลสำหรับ bulk edit
-            const items = franchiseStock
-                .filter(p => p.name.toLowerCase().includes(franchiseStockSearchTerm.toLowerCase()))
-                .map(p => ({
+            const items = filteredFranchiseStock.map(p => ({
                     productId: p.id,
                     name: p.name,
                     currentStock: p.stock,
@@ -1970,7 +1973,7 @@
             }
         };
 
-        // Stock Alert: สร้าง PO อัตโนมัติจากสินค้าที่สต็อกต่ำ (สำหรับแอดมิน - แยกซัพพลายเออร์อัตโนมัติ)
+        // Stock Alert: สร้าง PO อัตโนมัติจากสินค้าที่สต็อกต่ำ (สำหรับแอดมิน)
         const handleAutoCreatePO = async (selectedProducts) => {
             if (!selectedProducts || selectedProducts.length === 0) {
                 showError('กรุณาเลือกสินค้าที่ต้องการสร้าง PO');
@@ -2055,94 +2058,6 @@
             
             if (failedCount > 0) {
                 console.warn(`${failedCount} PO creation(s) failed`);
-            }
-        };
-
-        // Stock Alert: สร้าง Franchise PO อัตโนมัติจากสินค้าที่สต็อกต่ำ (สำหรับ franchise - แยกซัพพลายเออร์อัตโนมัติ)
-        const handleAutoCreateFranchisePO = async (selectedProducts) => {
-            if (!selectedProducts || selectedProducts.length === 0) {
-                showError('กรุณาเลือกสินค้าที่ต้องการสร้าง PO');
-                return;
-            }
-
-            // จัดกลุ่มสินค้าตามซัพพลายเออร์
-            const productsBySupplier = {};
-            selectedProducts.forEach(product => {
-                const supplier = product.supplier || 'ไม่ระบุ';
-                if (!productsBySupplier[supplier]) {
-                    productsBySupplier[supplier] = [];
-                }
-                // คำนวณจำนวนที่ต้องสั่ง (minStock * 2 - stock ปัจจุบัน)
-                const minStock = Number(product.minStock) || 5;
-                const currentStock = Number(product.stock) || 0;
-                const orderQty = Math.max(minStock * 2 - currentStock, minStock);
-                
-                productsBySupplier[supplier].push({
-                    productId: product.id,
-                    productName: product.name,
-                    qty: orderQty,
-                    price: product.franchisePrice || product.price || 0
-                });
-            });
-
-            // แยก PO ตามซัพพลายเออร์อัตโนมัติ
-            const suppliers = Object.keys(productsBySupplier);
-            let createdCount = 0;
-            let failedCount = 0;
-            
-            Swal.fire({ 
-                title: 'กำลังสร้าง PO...', 
-                html: `กำลังสร้าง PO สำหรับ ${suppliers.length} ซัพพลายเออร์`,
-                didOpen: () => Swal.showLoading(), 
-                allowOutsideClick: false 
-            });
-
-            // สร้าง PO แยกตามซัพพลายเออร์
-            for (const supplier of suppliers) {
-                try {
-                    // เพิ่ม delay เล็กน้อยเพื่อให้แต่ละ PO มี timestamp ที่แตกต่างกัน
-                    if (createdCount > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 100)); // delay 100ms
-                    }
-                    
-                    const res = await callAPI({
-                        action: 'createFranchisePO',
-                        poData: {
-                            supplier: supplier,
-                            items: productsBySupplier[supplier],
-                            expectedDate: '',
-                            notes: `สร้างอัตโนมัติจาก Stock Alert - ${new Date().toLocaleDateString('th-TH')}`
-                        },
-                        userEmail: user.email
-                    });
-
-                    if (res && res.success) {
-                        createdCount++;
-                    } else {
-                        failedCount++;
-                    }
-                } catch (error) {
-                    failedCount++;
-                    console.error('Error creating Franchise PO for supplier:', supplier, error);
-                }
-            }
-
-            Swal.close();
-
-            if (createdCount > 0) {
-                if (suppliers.length > 1) {
-                    showSuccess('สำเร็จ', `สร้าง PO เรียบร้อย ${createdCount} ใบ (แยกตามซัพพลายเออร์)`);
-                } else {
-                    Toast.fire({ icon: 'success', title: 'สร้าง PO เรียบร้อย' });
-                }
-                fetchFranchisePOs(true);
-                fetchFranchiseStock(true);
-            } else {
-                showError('ไม่สามารถสร้าง PO ได้');
-            }
-            
-            if (failedCount > 0) {
-                console.warn(`${failedCount} Franchise PO creation(s) failed`);
             }
         };
 
@@ -3276,14 +3191,19 @@
                                     {user?.customerType === 'franchise' && (
                                         <>
                                             <button onClick={() => changePage('franchise_stock')} className={`w-full text-left flex items-center px-6 py-4 sidebar-item ${page==='franchise_stock'?'sidebar-active':''}`}><Icon icon="fa-warehouse" className="text-center w-6" /> <span className="ml-3 text-sm">จัดการสต็อก</span></button>
-                                            <button onClick={() => changePage('franchise_stock_alert')} className={`w-full text-left flex items-center px-6 py-4 sidebar-item ${page==='franchise_stock_alert'?'sidebar-active':''} relative`}>
-                                                <Icon icon="fa-exclamation-triangle" className="text-center w-6" /> 
-                                                <span className="ml-3 text-sm">แจ้งเตือนสต็อกต่ำ</span>
-                                                {franchiseLowStockCount > 0 && (
-                                                    <span className="absolute right-4 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                                                        {franchiseLowStockCount > 9 ? '9+' : franchiseLowStockCount}
-                                                    </span>
-                                                )}
+                                            <button onClick={() => changePage('franchise_stock_alert')} className={`w-full text-left flex items-center px-6 py-4 sidebar-item ${page==='franchise_stock_alert'?'sidebar-active':''} relative`}><Icon icon="fa-exclamation-triangle" className="text-center w-6" /> <span className="ml-3 text-sm">แจ้งเตือนสต็อกต่ำ</span>
+                                                {(() => {
+                                                    const lowStockCount = franchiseStock.filter(p => {
+                                                        const stock = Number(p.stock) || 0;
+                                                        const minStock = Number(p.minStock) || 5;
+                                                        return stock <= minStock;
+                                                    }).length;
+                                                    return lowStockCount > 0 ? (
+                                                        <span className="absolute right-4 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                                            {lowStockCount > 9 ? '9+' : lowStockCount}
+                                                        </span>
+                                                    ) : null;
+                                                })()}
                                             </button>
                                             <button onClick={() => changePage('franchise_po')} className={`w-full text-left flex items-center px-6 py-4 sidebar-item ${page==='franchise_po'?'sidebar-active':''}`}><Icon icon="fa-shopping-cart" className="text-center w-6" /> <span className="ml-3 text-sm">สั่งซื้อสินค้า (PO)</span></button>
                                             <button onClick={() => changePage('franchise_stock_log')} className={`w-full text-left flex items-center px-6 py-4 sidebar-item ${page==='franchise_stock_log'?'sidebar-active':''}`}><Icon icon="fa-list-alt" className="text-center w-6" /> <span className="ml-3 text-sm">ประวัติสต็อก</span></button>
@@ -3331,7 +3251,7 @@
                                             <span className="absolute left-3 top-3 text-gray-400"><Icon icon="fa-search"/></span>
                                             <div className="relative">
                                                 <input 
-                                                    className="w-full pl-10 pr-10 p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-gray-800 outline-none transition font-normal" 
+                                                    className="w-full pl-10 pr-10 p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-green-600 outline-none transition font-normal" 
                                                     placeholder="ค้นหาชื่อสินค้า..." 
                                                     value={searchTerm} 
                                                     onChange={e => { 
@@ -3355,7 +3275,7 @@
                                         <div className="mt-2">
                                             <div className="relative">
                                                 <select 
-                                                    className="w-full p-2 pl-3 pr-10 border rounded-lg bg-gray-50 text-sm appearance-none outline-none focus:ring-2 focus:ring-gray-800 transition text-gray-700"
+                                                    className="w-full p-2 pl-3 pr-10 border rounded-lg bg-gray-50 text-sm appearance-none outline-none focus:ring-2 focus:ring-green-600 transition text-gray-700"
                                                     value={selectedSupplier}
                                                     onChange={(e) => setSelectedSupplier(e.target.value)}
                                                 >
@@ -3630,7 +3550,8 @@
                                                         <div className="text-right font-bold text-emerald-700 text-lg">฿{(Number(order.total) || 0).toLocaleString()}</div>
                                                     </div>
                                                     <div className="space-y-1 mb-4 font-normal text-gray-600">
-                                                        <p className="font-bold"><Icon icon="fa-user" className="mr-1"/> {order.user}</p>
+                                                        <p className="font-bold"><Icon icon="fa-user" className="mr-1"/> {order.username || order.user}</p>
+                                                        <p className="text-xs text-gray-500 font-normal">{order.user}</p>
                                                         <p><Icon icon="fa-map-marker-alt" className="mr-1"/> {order.address}</p>
                                                         <div className="flex gap-2 text-xs pt-1 font-normal">
                                                             <span className={`px-2 py-0.5 rounded font-bold ${order.status==='รอตรวจสอบ'?'bg-yellow-100 text-yellow-800':order.status==='ชำระเงินแล้ว'?'bg-blue-100 text-blue-800':'bg-green-100 text-green-800'}`}>{order.status}</span>
@@ -3805,8 +3726,8 @@
                                     <h3 className="text-xl font-bold mb-6 border-b pb-2"><Icon icon="fa-user-circle" className="mr-1"/> แก้ไขข้อมูลส่วนตัว</h3>
                                     <div className="space-y-4 font-normal">
                                         <div><label className="block font-bold text-gray-500 mb-1">ชื่อร้าน / ผู้ติดต่อ</label><input className="w-full border rounded p-3 focus:ring-2 focus:ring-gray-800 outline-none transition font-normal" value={profileForm.username} onChange={e => setProfileForm({...profileForm, username: e.target.value})} /></div>
-                                        <div><label className="block font-bold text-gray-500 mb-1">เบอร์โทรศัพท์</label><input className="w-full border rounded p-3 focus:ring-2 focus:ring-green-600 outline-none transition" value={profileForm.phone} onChange={e => setProfileForm({...profileForm, phone: e.target.value})} /></div>
-                                        <div><label className="block font-bold text-gray-500 mb-1">ที่อยู่จัดส่ง</label><textarea className="w-full border rounded p-3 focus:ring-2 focus:ring-green-600 outline-none transition" rows="3" value={profileForm.address} onChange={e => setProfileForm({...profileForm, address: e.target.value})}></textarea></div>
+                                        <div><label className="block font-bold text-gray-500 mb-1">เบอร์โทรศัพท์</label><input className="w-full border rounded p-3 focus:ring-2 focus:ring-gray-800 outline-none transition" value={profileForm.phone} onChange={e => setProfileForm({...profileForm, phone: e.target.value})} /></div>
+                                        <div><label className="block font-bold text-gray-500 mb-1">ที่อยู่จัดส่ง</label><textarea className="w-full border rounded p-3 focus:ring-2 focus:ring-gray-800 outline-none transition" rows="3" value={profileForm.address} onChange={e => setProfileForm({...profileForm, address: e.target.value})}></textarea></div>
                                         <div className="pt-4 font-bold"><button onClick={handleUpdateProfile} className="bg-green-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-green-700 transition shadow-lg active:scale-95 uppercase tracking-wider">บันทึกข้อมูลส่วนตัว</button></div>
                                     </div>
                                 </div>
@@ -3853,7 +3774,10 @@
                                             className="w-full pl-10 p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-gray-800 outline-none transition font-normal" 
                                                 placeholder="ค้นหาสินค้า..." 
                                                 value={franchiseStockSearchTerm} 
-                                                onChange={e => setFranchiseStockSearchTerm(e.target.value)} 
+                                                onChange={e => {
+                                                    setFranchiseStockSearchTerm(e.target.value);
+                                                    setFranchiseStockPage(1); // Reset to page 1 when searching
+                                                }} 
                                             />
                                         </div>
                                     </div>
@@ -3864,18 +3788,13 @@
                                                     <th className="p-4 w-12">
                                                         <input
                                                             type="checkbox"
-                                                            checked={franchiseStock
-                                                                .filter(p => p.name.toLowerCase().includes(franchiseStockSearchTerm.toLowerCase()))
-                                                                .length > 0 && 
-                                                                franchiseStock
-                                                                    .filter(p => p.name.toLowerCase().includes(franchiseStockSearchTerm.toLowerCase()))
-                                                                    .every(p => selectedProductsForBulkEdit.includes(p.id))}
+                                                            checked={filteredFranchiseStock.length > 0 && 
+                                                                filteredFranchiseStock.every(p => selectedProductsForBulkEdit.includes(p.id))}
                                                             onChange={(e) => {
-                                                                const filtered = franchiseStock.filter(p => p.name.toLowerCase().includes(franchiseStockSearchTerm.toLowerCase()));
                                                                 if (e.target.checked) {
-                                                                    setSelectedProductsForBulkEdit([...new Set([...selectedProductsForBulkEdit, ...filtered.map(p => p.id)])]);
+                                                                    setSelectedProductsForBulkEdit([...new Set([...selectedProductsForBulkEdit, ...filteredFranchiseStock.map(p => p.id)])]);
                                                                 } else {
-                                                                    setSelectedProductsForBulkEdit(selectedProductsForBulkEdit.filter(id => !filtered.find(p => p.id === id)));
+                                                                    setSelectedProductsForBulkEdit(selectedProductsForBulkEdit.filter(id => !filteredFranchiseStock.find(p => p.id === id)));
                                                                 }
                                                             }}
                                                             className="rounded"
@@ -3888,9 +3807,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y">
-                                                {franchiseStock
-                                                    .filter(p => p.name.toLowerCase().includes(franchiseStockSearchTerm.toLowerCase()))
-                                                    .map(p => (
+                                                {displayedFranchiseStock.map(p => (
                                                         <tr key={p.id} className="hover:bg-gray-50">
                                                             <td className="p-4">
                                                                 <input
@@ -4138,6 +4055,14 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                    {filteredFranchiseStock.length > itemsPerPage && (
+                                        <Pagination
+                                            totalItems={filteredFranchiseStock.length}
+                                            itemsPerPage={itemsPerPage}
+                                            currentPage={franchiseStockPage}
+                                            onPageChange={setFranchiseStockPage}
+                                        />
+                                    )}
                                 </div>
                             )}
 
@@ -4150,7 +4075,7 @@
                                             <button onClick={() => setIsPOModalOpen(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm">
                                                 <Icon icon="fa-plus" /> สร้าง PO
                                             </button>
-                                            <button onClick={() => fetchFranchisePOs()} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                            <button onClick={() => fetchFranchisePOs(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
                                         </div>
@@ -4212,7 +4137,7 @@
                                 <div className="fade-in max-w-6xl mx-auto space-y-4 text-gray-800 font-normal">
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="text-xl font-bold">ประวัติสต็อกแฟรนไชส์</h3>
-                                        <button onClick={() => fetchFranchiseStockLog()} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                        <button onClick={() => fetchFranchiseStockLog(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                             <Icon icon="fa-sync" /> Refresh
                                         </button>
                                     </div>
@@ -4224,26 +4149,16 @@
                                             <input 
                                                 type="date" 
                                                 className="border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-normal" 
-                                                value={franchiseStockLogStartDateInput} 
-                                                onChange={e => setFranchiseStockLogStartDateInput(e.target.value)} 
+                                                value={franchiseStockLogStartDate} 
+                                                onChange={e => setFranchiseStockLogStartDate(e.target.value)} 
                                             />
                                             <span className="text-gray-600 font-bold">ถึง</span>
                                             <input 
                                                 type="date" 
                                                 className="border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-normal" 
-                                                value={franchiseStockLogEndDateInput} 
-                                                onChange={e => setFranchiseStockLogEndDateInput(e.target.value)} 
+                                                value={franchiseStockLogEndDate} 
+                                                onChange={e => setFranchiseStockLogEndDate(e.target.value)} 
                                             />
-                                            <button 
-                                                onClick={() => {
-                                                    setFranchiseStockLogStartDate(franchiseStockLogStartDateInput);
-                                                    setFranchiseStockLogEndDate(franchiseStockLogEndDateInput);
-                                                    fetchFranchiseStockLog(false);
-                                                }}
-                                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-bold text-sm flex items-center gap-2"
-                                            >
-                                                <Icon icon="fa-search" /> ค้นหา
-                                            </button>
                                             <input 
                                                 type="text" 
                                                 placeholder="ค้นหาสินค้า, Product ID, หมายเหตุ..." 
@@ -4253,12 +4168,10 @@
                                             />
                                             <button 
                                                 onClick={() => {
-                                                    setFranchiseStockLogStartDateInput('');
-                                                    setFranchiseStockLogEndDateInput('');
                                                     setFranchiseStockLogStartDate('');
                                                     setFranchiseStockLogEndDate('');
                                                     setFranchiseStockLogSearchTerm('');
-                                                    fetchFranchiseStockLog();
+                                                    // useEffect จะจัดการ fetch ให้อัตโนมัติเมื่อ state เปลี่ยน
                                                 }}
                                                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-bold text-sm flex items-center gap-2"
                                             >
@@ -4429,15 +4342,37 @@
                                             </p>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => fetchProducts()} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                            <button onClick={() => fetchProducts(true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
                                             {filteredLowStockProducts.length > 0 && (
                                                 <button 
                                                     onClick={() => {
+                                                        // จัดกลุ่มตาม supplier เพื่อแสดงจำนวน PO ที่จะสร้าง
+                                                        const productsBySupplier = {};
+                                                        filteredLowStockProducts.forEach(product => {
+                                                            const supplier = product.supplier || 'ไม่ระบุ';
+                                                            if (!productsBySupplier[supplier]) {
+                                                                productsBySupplier[supplier] = [];
+                                                            }
+                                                            productsBySupplier[supplier].push(product);
+                                                        });
+                                                        const supplierCount = Object.keys(productsBySupplier).length;
+                                                        
                                                         Swal.fire({
                                                             title: 'สร้าง PO อัตโนมัติ',
-                                                            text: `ต้องการสร้าง PO สำหรับสินค้าที่เลือกทั้งหมด (${filteredLowStockProducts.length} รายการ) หรือไม่?`,
+                                                            html: `
+                                                                <div class="text-left">
+                                                                    <p class="mb-2">ต้องการสร้าง PO สำหรับสินค้าทั้งหมด (${filteredLowStockProducts.length} รายการ) หรือไม่?</p>
+                                                                    <p class="text-sm text-gray-600 mb-2">ระบบจะแยกสร้าง PO ตามซัพพลายเออร์อัตโนมัติ:</p>
+                                                                    <ul class="text-sm text-gray-700 list-disc list-inside">
+                                                                        ${Object.keys(productsBySupplier).map(supplier => 
+                                                                            `<li>${supplier}: ${productsBySupplier[supplier].length} รายการ</li>`
+                                                                        ).join('')}
+                                                                    </ul>
+                                                                    <p class="text-sm font-bold text-emerald-600 mt-2">จะสร้าง PO ทั้งหมด ${supplierCount} ใบ</p>
+                                                                </div>
+                                                            `,
                                                             icon: 'question',
                                                             showCancelButton: true,
                                                             confirmButtonText: 'ยืนยัน',
@@ -4451,7 +4386,7 @@
                                                     }}
                                                     className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm"
                                                 >
-                                                    <Icon icon="fa-magic" className="mr-1" /> สร้าง PO อัตโนมัติ
+                                                    <Icon icon="fa-magic" className="mr-1" /> สร้าง PO อัตโนมัติ (แยกตามซัพพลายเออร์)
                                                 </button>
                                             )}
                                         </div>
@@ -4622,39 +4557,31 @@
                                                             return;
                                                         }
                                                         
-                                                        handleAutoCreatePO(selectedProducts);
-                                                    }}
-                                                    className="bg-red-600 text-white px-6 py-3 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-lg"
-                                                >
-                                                    <Icon icon="fa-magic" className="mr-2" />
-                                                    สร้าง PO สำหรับสินค้าที่เลือก
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Franchise Stock Alert */}
-                            {page === 'franchise_stock_alert' && user?.customerType === 'franchise' && (
-                                <div className="fade-in max-w-6xl mx-auto space-y-4 text-gray-800 font-normal">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <div>
-                                            <h3 className="text-xl font-bold">แจ้งเตือนสต็อกต่ำ</h3>
-                                            <p className="text-sm text-gray-500 mt-1">
-                                                พบสินค้าที่สต็อกต่ำกว่า minStock จำนวน <span className="font-bold text-red-600">{franchiseLowStockCount}</span> รายการ
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => fetchFranchiseStock(true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
-                                                <Icon icon="fa-sync" /> Refresh
-                                            </button>
-                                            {filteredFranchiseLowStockProducts.length > 0 && (
-                                                <button 
-                                                    onClick={() => {
+                                                        // จัดกลุ่มตาม supplier เพื่อแสดงจำนวน PO ที่จะสร้าง
+                                                        const productsBySupplier = {};
+                                                        selectedProducts.forEach(product => {
+                                                            const supplier = product.supplier || 'ไม่ระบุ';
+                                                            if (!productsBySupplier[supplier]) {
+                                                                productsBySupplier[supplier] = [];
+                                                            }
+                                                            productsBySupplier[supplier].push(product);
+                                                        });
+                                                        const supplierCount = Object.keys(productsBySupplier).length;
+                                                        
                                                         Swal.fire({
-                                                            title: 'สร้าง PO อัตโนมัติ',
-                                                            text: `ต้องการสร้าง PO สำหรับสินค้าที่เลือกทั้งหมด (${filteredFranchiseLowStockProducts.length} รายการ) หรือไม่?`,
+                                                            title: 'สร้าง PO สำหรับสินค้าที่เลือก',
+                                                            html: `
+                                                                <div class="text-left">
+                                                                    <p class="mb-2">ต้องการสร้าง PO สำหรับสินค้าที่เลือก (${selectedProducts.length} รายการ) หรือไม่?</p>
+                                                                    <p class="text-sm text-gray-600 mb-2">ระบบจะแยกสร้าง PO ตามซัพพลายเออร์อัตโนมัติ:</p>
+                                                                    <ul class="text-sm text-gray-700 list-disc list-inside">
+                                                                        ${Object.keys(productsBySupplier).map(supplier => 
+                                                                            `<li>${supplier}: ${productsBySupplier[supplier].length} รายการ</li>`
+                                                                        ).join('')}
+                                                                    </ul>
+                                                                    <p class="text-sm font-bold text-emerald-600 mt-2">จะสร้าง PO ทั้งหมด ${supplierCount} ใบ</p>
+                                                                </div>
+                                                            `,
                                                             icon: 'question',
                                                             showCancelButton: true,
                                                             confirmButtonText: 'ยืนยัน',
@@ -4662,13 +4589,77 @@
                                                             confirmButtonColor: THEME_COLOR
                                                         }).then((result) => {
                                                             if (result.isConfirmed) {
-                                                                handleAutoCreateFranchisePO(filteredFranchiseLowStockProducts);
+                                                                handleAutoCreatePO(selectedProducts);
+                                                            }
+                                                        });
+                                                    }}
+                                                    className="bg-red-600 text-white px-6 py-3 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-lg"
+                                                >
+                                                    <Icon icon="fa-magic" className="mr-2" />
+                                                    สร้าง PO สำหรับสินค้าที่เลือก (แยกตามซัพพลายเออร์)
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {/* Franchise Stock Alert */}
+                            {page === 'franchise_stock_alert' && user?.customerType === 'franchise' && (
+                                <div className="fade-in max-w-6xl mx-auto space-y-4 text-gray-800 font-normal">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div>
+                                            <h3 className="text-xl font-bold">แจ้งเตือนสต็อกต่ำ</h3>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                พบสินค้าที่สต็อกต่ำกว่า minStock จำนวน <span className="font-bold text-red-600">{lowStockFranchiseProducts.length}</span> รายการ
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => fetchFranchiseStock(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                                <Icon icon="fa-sync" /> Refresh
+                                            </button>
+                                            {filteredLowStockFranchiseProducts.length > 0 && (
+                                                <button 
+                                                    onClick={() => {
+                                                        // จัดกลุ่มตาม supplier เพื่อแสดงจำนวน PO ที่จะสร้าง
+                                                        const productsBySupplier = {};
+                                                        filteredLowStockFranchiseProducts.forEach(product => {
+                                                            const supplier = product.supplier || 'ไม่ระบุ';
+                                                            if (!productsBySupplier[supplier]) {
+                                                                productsBySupplier[supplier] = [];
+                                                            }
+                                                            productsBySupplier[supplier].push(product);
+                                                        });
+                                                        const supplierCount = Object.keys(productsBySupplier).length;
+                                                        
+                                                        Swal.fire({
+                                                            title: 'สร้าง PO อัตโนมัติ',
+                                                            html: `
+                                                                <div class="text-left">
+                                                                    <p class="mb-2">ต้องการสร้าง PO สำหรับสินค้าทั้งหมด (${filteredLowStockFranchiseProducts.length} รายการ) หรือไม่?</p>
+                                                                    <p class="text-sm text-gray-600 mb-2">ระบบจะแยกสร้าง PO ตามซัพพลายเออร์อัตโนมัติ:</p>
+                                                                    <ul class="text-sm text-gray-700 list-disc list-inside">
+                                                                        ${Object.keys(productsBySupplier).map(supplier => 
+                                                                            `<li>${supplier}: ${productsBySupplier[supplier].length} รายการ</li>`
+                                                                        ).join('')}
+                                                                    </ul>
+                                                                    <p class="text-sm font-bold text-emerald-600 mt-2">จะสร้าง PO ทั้งหมด ${supplierCount} ใบ</p>
+                                                                </div>
+                                                            `,
+                                                            icon: 'question',
+                                                            showCancelButton: true,
+                                                            confirmButtonText: 'ยืนยัน',
+                                                            cancelButtonText: 'ยกเลิก',
+                                                            confirmButtonColor: THEME_COLOR
+                                                        }).then((result) => {
+                                                            if (result.isConfirmed) {
+                                                                handleAutoCreateFranchisePO(filteredLowStockFranchiseProducts);
                                                             }
                                                         });
                                                     }}
                                                     className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm"
                                                 >
-                                                    <Icon icon="fa-magic" className="mr-1" /> สร้าง PO อัตโนมัติ
+                                                    <Icon icon="fa-magic" className="mr-1" /> สร้าง PO อัตโนมัติ (แยกตามซัพพลายเออร์)
                                                 </button>
                                             )}
                                         </div>
@@ -4679,18 +4670,21 @@
                                         <div className="relative">
                                             <span className="absolute left-3 top-3 text-gray-400"><Icon icon="fa-search"/></span>
                                             <input 
-                                                className="w-full pl-10 p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-green-600 outline-none transition font-normal" 
+                                                className="w-full pl-10 p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-gray-800 outline-none transition font-normal" 
                                                 placeholder="ค้นหาสินค้าที่สต็อกต่ำ..." 
                                                 value={franchiseStockAlertSearch} 
-                                                onChange={e => setFranchiseStockAlertSearch(e.target.value)} 
+                                                onChange={e => {
+                                                    setFranchiseStockAlertSearch(e.target.value);
+                                                    setFranchiseStockAlertPage(1);
+                                                }} 
                                             />
                                         </div>
                                     </div>
 
                                     {/* Low Stock Products List */}
-                                    {filteredFranchiseLowStockProducts.length === 0 ? (
+                                    {filteredLowStockFranchiseProducts.length === 0 ? (
                                         <div className="text-center py-20 text-gray-400 bg-white rounded-xl border border-dashed">
-                                            {franchiseLowStockProducts.length === 0 
+                                            {lowStockFranchiseProducts.length === 0 
                                                 ? '🎉 ไม่มีสินค้าที่สต็อกต่ำ - ทุกอย่างพร้อม!'
                                                 : 'ไม่พบสินค้าที่ตรงกับการค้นหา'
                                             }
@@ -4705,14 +4699,14 @@
                                                                 type="checkbox" 
                                                                 className="rounded"
                                                                 checked={(() => {
-                                                                    const currentPageProducts = filteredFranchiseLowStockProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage);
+                                                                    const currentPageProducts = filteredLowStockFranchiseProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage);
                                                                     return currentPageProducts.length > 0 && currentPageProducts.every(p => {
                                                                         const selected = document.querySelector(`input[data-franchise-product-id="${p.id}"]`);
                                                                         return selected?.checked;
                                                                     });
                                                                 })()}
                                                                 onChange={(e) => {
-                                                                    const currentPageProducts = filteredFranchiseLowStockProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage);
+                                                                    const currentPageProducts = filteredLowStockFranchiseProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage);
                                                                     currentPageProducts.forEach(product => {
                                                                         const checkbox = document.querySelector(`input[data-franchise-product-id="${product.id}"]`);
                                                                         if (checkbox) checkbox.checked = e.target.checked;
@@ -4724,23 +4718,28 @@
                                                         <th className="p-4 text-center">สต็อกปัจจุบัน</th>
                                                         <th className="p-4 text-center">Min Stock</th>
                                                         <th className="p-4 text-center">ขาด</th>
-                                                        <th className="p-4 text-center">แนะนำสั่ง</th>
                                                         <th className="p-4 text-right">จัดการ</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y">
-                                                    {filteredFranchiseLowStockProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage).map(product => {
+                                                    {filteredLowStockFranchiseProducts.slice((franchiseStockAlertPage - 1) * itemsPerPage, franchiseStockAlertPage * itemsPerPage).map(product => {
                                                         const stock = Number(product.stock) || 0;
                                                         const minStock = Number(product.minStock) || 5;
                                                         const shortage = minStock - stock;
-                                                        const recommendedQty = Math.max(minStock * 2 - stock, minStock);
                                                         
                                                         return (
                                                             <tr key={product.id} className="hover:bg-gray-50">
                                                                 <td className="p-4">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        className="rounded"
+                                                                        data-franchise-product-id={product.id}
+                                                                    />
+                                                                </td>
+                                                                <td className="p-4">
                                                                     <div className="font-bold">{product.name}</div>
                                                                     <div className="text-xs text-gray-400 mt-1">
-                                                                        {product.category || 'ไม่มีหมวดหมู่'} | {product.supplier || 'ไม่ระบุ'}
+                                                                        {product.category || 'ไม่ระบุหมวดหมู่'}
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-4 text-center">
@@ -4756,9 +4755,6 @@
                                                                 <td className="p-4 text-center">
                                                                     <span className="text-red-600 font-bold">{shortage > 0 ? `-${shortage}` : '0'}</span>
                                                                 </td>
-                                                                <td className="p-4 text-center">
-                                                                    <span className="text-emerald-600 font-bold">{recommendedQty} {product.unit || 'ชิ้น'}</span>
-                                                                </td>
                                                                 <td className="p-4 text-right">
                                                                     <div className="flex justify-end gap-2">
                                                                         <button 
@@ -4766,7 +4762,7 @@
                                                                                 setPoItems([{
                                                                                     productId: product.id,
                                                                                     productName: product.name,
-                                                                                    qty: recommendedQty,
+                                                                                    qty: Math.max(minStock * 2 - stock, minStock),
                                                                                     price: product.franchisePrice || product.price || 0
                                                                                 }]);
                                                                                 setPoSupplier(product.supplier || '');
@@ -4778,39 +4774,45 @@
                                                                         </button>
                                                                         <button 
                                                                             onClick={() => {
-                                                                                Swal.fire({
-                                                                                    title: `เติมสต็อก: ${product.name}`,
-                                                                                    text: 'ระบุจำนวนที่ต้องการเติมเพิ่ม (+)',
-                                                                                    input: 'number',
-                                                                                    inputValue: 0,
-                                                                                    showCancelButton: true,
-                                                                                    confirmButtonColor: THEME_COLOR
-                                                                                }).then((res) => {
-                                                                                    if (res.isConfirmed && res.value !== null) {
-                                                                                        const addQty = parseInt(res.value) || 0;
-                                                                                        if (addQty > 0) {
-                                                                                            Swal.fire({
-                                                                                                title: 'กำลังอัปเดตสต็อก...',
-                                                                                                didOpen: () => Swal.showLoading(),
-                                                                                                allowOutsideClick: false
-                                                                                            });
-                                                                                            callAPI({
-                                                                                                action: 'updateFranchiseStock',
-                                                                                                productId: product.id,
-                                                                                                newStock: stock + addQty,
-                                                                                                userEmail: user.email
-                                                                                            }).then(result => {
+                                                                                Swal.fire({ 
+                                                                                    title: `แก้ไขสต็อก: ${product.name}`, 
+                                                                                    input: 'number', 
+                                                                                    inputValue: product.stock, 
+                                                                                    showCancelButton: true, 
+                                                                                    confirmButtonColor: THEME_COLOR 
+                                                                                }).then((res) => { 
+                                                                                    if (res.isConfirmed) {
+                                                                                        Swal.fire({ title: 'กำลังทำรายการ...', text: 'กรุณารอสักครู่', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                                                                        callAPI({ action: 'updateFranchiseStock', productId: product.id, newStock: parseInt(res.value), userEmail: user.email }).then(async r => {
+                                                                                            if(r.success) { 
+                                                                                                Swal.fire({
+                                                                                                    icon: 'success',
+                                                                                                    title: 'ทำรายการเสร็จแล้ว',
+                                                                                                    text: 'สต็อกอัปเดตแล้ว',
+                                                                                                    confirmButtonText: 'เสร็จสิ้น',
+                                                                                                    allowOutsideClick: false
+                                                                                                }).then(async (result) => {
+                                                                                                    if (result.isConfirmed) {
+                                                                                                        Swal.fire({
+                                                                                                            title: 'กำลังอัพเดทข้อมูล...',
+                                                                                                            text: 'กรุณารอสักครู่',
+                                                                                                            allowOutsideClick: false,
+                                                                                                            didOpen: () => Swal.showLoading()
+                                                                                                        });
+                                                                                                        await fetchFranchiseStock(true, true);
+                                                                                                        Swal.close();
+                                                                                                    }
+                                                                                                });
+                                                                                            } else { 
                                                                                                 Swal.close();
-                                                                                                if (result.success) {
-                                                                                                    Toast.fire({ icon: 'success', title: 'อัปเดตสต็อกเรียบร้อย' });
-                                                                                                    fetchFranchiseStock(true);
-                                                                                                } else {
-                                                                                                    showError(result.message || 'เกิดข้อผิดพลาด');
-                                                                                                }
-                                                                                            });
-                                                                                        }
+                                                                                                showError('เกิดข้อผิดพลาดในการอัปเดตสต็อก'); 
+                                                                                            }
+                                                                                        }).catch(error => {
+                                                                                            Swal.close();
+                                                                                            showError('เกิดข้อผิดพลาด: ' + (error.message || 'Unknown error'));
+                                                                                        });
                                                                                     }
-                                                                                });
+                                                                                }); 
                                                                             }}
                                                                             className="p-2 bg-green-600 text-white rounded hover:bg-green-700 transition text-xs flex items-center gap-1 font-bold"
                                                                         >
@@ -4827,10 +4829,10 @@
                                     )}
                                     
                                     {/* Pagination for Franchise Stock Alert */}
-                                    {filteredFranchiseLowStockProducts.length > itemsPerPage && (
+                                    {filteredLowStockFranchiseProducts.length > itemsPerPage && (
                                         <div className="mt-4">
                                             <Pagination 
-                                                totalItems={filteredFranchiseLowStockProducts.length} 
+                                                totalItems={filteredLowStockFranchiseProducts.length} 
                                                 itemsPerPage={itemsPerPage} 
                                                 currentPage={franchiseStockAlertPage} 
                                                 onPageChange={(page) => {
@@ -4842,7 +4844,7 @@
                                     )}
 
                                     {/* Summary Card */}
-                                    {filteredFranchiseLowStockProducts.length > 0 && (
+                                    {filteredLowStockFranchiseProducts.length > 0 && (
                                         <div className="bg-gradient-to-r from-red-50 to-orange-50 p-6 rounded-xl border-2 border-red-200">
                                             <div className="flex justify-between items-center">
                                                 <div>
@@ -4851,28 +4853,9 @@
                                                         สรุปสินค้าที่ต้องเติม
                                                     </h4>
                                                     <p className="text-sm text-gray-700">
-                                                        พบสินค้าที่สต็อกต่ำ <span className="font-bold text-red-600">{filteredFranchiseLowStockProducts.length}</span> รายการ
+                                                        พบสินค้าที่สต็อกต่ำ <span className="font-bold text-red-600">{filteredLowStockFranchiseProducts.length}</span> รายการ
                                                     </p>
                                                 </div>
-                                                <button
-                                                    onClick={() => {
-                                                        const selectedProducts = filteredFranchiseLowStockProducts.filter(product => {
-                                                            const checkbox = document.querySelector(`input[data-franchise-product-id="${product.id}"]`);
-                                                            return checkbox?.checked;
-                                                        });
-                                                        
-                                                        if (selectedProducts.length === 0) {
-                                                            showError('กรุณาเลือกสินค้าที่ต้องการสร้าง PO');
-                                                            return;
-                                                        }
-                                                        
-                                                        handleAutoCreateFranchisePO(selectedProducts);
-                                                    }}
-                                                    className="bg-red-600 text-white px-6 py-3 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-lg"
-                                                >
-                                                    <Icon icon="fa-magic" className="mr-2" />
-                                                    สร้าง PO สำหรับสินค้าที่เลือก
-                                                </button>
                                             </div>
                                         </div>
                                     )}
@@ -4884,7 +4867,7 @@
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="text-xl font-bold">Purchase Order (PO)</h3>
                                         <div className="flex gap-2">
-                                            <button onClick={() => fetchPOs()} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
+                                            <button onClick={() => fetchPOs(false, true)} className="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition">
                                                 <Icon icon="fa-sync" /> Refresh
                                             </button>
                                             <button onClick={openCreatePOModal} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm">
